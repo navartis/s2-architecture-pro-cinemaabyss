@@ -9,7 +9,6 @@
 
 Комментарий к модели данных: слово "фильм" в трёх доменах означает разное, поэтому в контрактах три имени: `movie`, `streamSource`, `libraryItem`.
 
-
 ## Задание 2
 
 ### 1. Proxy
@@ -61,6 +60,10 @@
 Необходимые тесты для проверки этого API вызываются при запуске npm run test:local из папки tests/postman 
 Приложите скриншот тестов и скриншот состояния топиков Kafka http://localhost:8090 
 
+Сервис: `src/microservices/events/`. Продюсер и consumer group в одном процессе, топики `movie-events`, `user-events`, `payment-events`.
+
+![Результат npm run test:local](docs/screenshots/postman-local.png)
+![Топики Kafka](docs/screenshots/kafka-topics.png)
 
 ## Задание 3
 
