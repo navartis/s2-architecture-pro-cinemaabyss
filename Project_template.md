@@ -48,6 +48,13 @@
    ```
 - Протестируйте постепенный переход, изменив переменную окружения MOVIES_MIGRATION_PERCENT в файле docker-compose.yml.
 
+Сервис: `src/microservices/proxy/` (Go, только стандартная библиотека, внешних зависимостей нет). Маршрутизация одной таблицей: `/health` отвечает сам прокси, `/api/events*` уходит в events-service, `/api/movies*` -- развилка по флагу, всё остальное (`/api/users`, `/api/payments`, `/api/subscriptions`) в монолит.
+
+Флаг работает так: `GRADUAL_MIGRATION=false` -- всегда монолит; `true` при `MOVIES_MIGRATION_PERCENT=0` -- всегда монолит; при `100` -- всегда movies-service; между -- доля запросов выбирается на каждый запрос отдельно. Мусорное значение процента трактуется как `0` с записью в лог: неизвестное состояние флага должно означать "ничего не мигрировало", а не "половина непонятно куда". Каждый запрос пишется в лог с целевым сервисом и причиной -- без этого переход нечем доказать.
+
+Переход проверен серией запросов, а не одним: при `100` десять вызовов дали рост счётчика `get movies from movies` в логе movies-service ровно на десять, при `0` -- на ноль. В логе прокси при этом разные причины: `-> movies-service (feature flag, movies service)` против `-> monolith (feature flag, monolith)`.
+
+
 ### 2. Kafka
  Вам как архитектуру нужно также проверить гипотезу насколько просто реализовать применение Kafka в данной архитектуре.
 
@@ -115,6 +122,14 @@ jobs:
 Как только сборка отработает и в github registry появятся ваши образы, можно переходить к блоку настройки Kubernetes
 Успешным результатом данного шага является "зеленая" сборка и "зеленые" тесты
 
+Что изменено в workflow:
+
+- `docker-build-push.yml`: триггер `branches: [ main, cinema ]`; добавлен шаг `docker/setup-qemu-action@v3` и `platforms: linux/amd64,linux/arm64` для всех четырёх образов; добавлены сборка и push для `proxy-service` и `events-service` по образцу существующих. Мультиархитектура нужна не для красоты: раннеры GitHub -- x86, а проверка шла на arm64, и без второй платформы образы в локальном кластере запускались бы только через эмуляцию.
+- `api-tests.yml`: `cinema` добавлена в `push` и `pull_request`. Плюс исправлен дефект шаблона: в шаге "Run API tests" стоял `working-directory: tests/postman` и повторный `docker compose up -d`, который искал compose-файл в `tests/postman`, где его нет, и падал бы с `no configuration file provided` до запуска тестов. Второй подъём убран: сервисы к этому моменту уже подняты шагом выше.
+
+Оба workflow прошли зелёными по пушу в `cinema`. Результат проверен не по галочке, а по registry: у каждого из четырёх образов манифест содержит `linux/amd64` и `linux/arm64`, а анонимный `docker pull` проходит -- то есть образы доступны без токена.
+
+
 
 ### Proxy в Kubernetes
 
@@ -167,6 +182,11 @@ cat .docker/config.json | base64
 ```bash
  .dockerconfigjson: значение в base64 файла ~/.docker/config.json
 ```
+
+**⚠️ Отступление от инструкции для безопасности моего аккаунта** 
+Токен в репозиторий не клался. Пакеты в GHCR переведены в public, а в `dockerconfigsecret.yaml` лежит валидный, но пустой `.dockerconfigjson` -- base64 от `{"auths":{}}` (`eyJhdXRocyI6e319`). 
+
+✅ Анонимный `docker pull` образа проходит с пустым `DOCKER_CONFIG`.
 
 #### Шаг 2
 
@@ -441,6 +461,12 @@ You can see 21 for the upstream_rq_pending_overflow value which means 21 calls s
 ```
 
 Приложите скриншот работы circuit breaker'а
+
+Нагрузка Fortio, 50 параллельных соединений, 500 запросов:
+![Fortio load по movies-service](docs/screenshots/istio-fortio-load.png)
+
+Статистика sidecar Fortio:
+![Статистика circuit breaker](docs/screenshots/istio-circuit-breaker-stats.png)
 
 Удаляем все
 ```bash
