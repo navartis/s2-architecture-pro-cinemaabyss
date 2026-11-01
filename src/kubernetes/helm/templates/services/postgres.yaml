@@ -61,6 +61,13 @@ spec:
       - name: postgres-init-scripts
         configMap:
           name: postgres-init-scripts
+      {{- if not .Values.database.persistence.enabled }}
+      # Without persistence the data volume is an emptyDir inside the pod.
+      # The old template emitted this line outside the volumes list, which
+      # produced an invalid manifest whenever persistence was disabled.
+      - name: postgres-data
+        emptyDir: {}
+      {{- end }}
   {{- if .Values.database.persistence.enabled }}
   volumeClaimTemplates:
   - metadata:
@@ -70,9 +77,6 @@ spec:
       resources:
         requests:
           storage: {{ .Values.database.persistence.size }}
-  {{- else }}
-      - name: postgres-data
-        emptyDir: {}
   {{- end }}
 ---
 apiVersion: v1

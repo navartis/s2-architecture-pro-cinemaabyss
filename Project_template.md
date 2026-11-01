@@ -370,6 +370,12 @@ minikube tunnel
 https://cinemaabyss.example.com/api/movies
 и приложите скриншот развертывания helm и вывода https://cinemaabyss.example.com/api/movies
 
+Установка чарта с нуля, в пустой namespace (перед этим `kubectl delete all --all -n cinemaabyss` и `kubectl delete namespace cinemaabyss`):
+![helm install и состояние подов](docs/screenshots/helm-install.png)
+
+`monolith` и `movies-service` успели дважды упасть и подняться, потому что Postgres стартует медленнее приложений. Манифесты эти сервисы не ретраят, но `restartPolicy: Always` перезапускает их.
+
+![Вывод /api/movies после helm install](docs/screenshots/helm-api-movies.png)
 
 # Задание 5
 Компания планирует активно развиваться и для повышения надежности, безопасности, реализации сетевых паттернов типа Circuit Breaker и канареечного деплоя вам как архитектору необходимо развернуть istio и настроить circuit breaker для monolith и movies сервисов.

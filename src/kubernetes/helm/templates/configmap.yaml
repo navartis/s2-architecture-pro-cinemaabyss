@@ -15,8 +15,14 @@ data:
 
   # Service URLs
   MONOLITH_URL: "http://monolith:{{ .Values.monolith.service.port }}"
-  MOVIES_SERVICE_URL: "http://movies:{{ .Values.moviesService.service.port }}"
-  
+  # The service is called movies-service, not movies: the old value pointed at a
+  # host that does not exist, which broke routing silently.
+  MOVIES_SERVICE_URL: "http://movies-service:{{ .Values.moviesService.service.port }}"
+  EVENTS_SERVICE_URL: "http://events-service:{{ .Values.eventsService.service.port }}"
+
+  # Kafka
+  KAFKA_BROKERS: {{ .Values.config.kafkaBrokers | quote }}
+
   # Strangler Fig configuration
   GRADUAL_MIGRATION: {{ .Values.config.gradualMigration | quote }}
   MOVIES_MIGRATION_PERCENT: {{ .Values.config.moviesMigrationPercent | quote }}
