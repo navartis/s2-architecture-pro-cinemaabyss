@@ -279,6 +279,22 @@ cat .docker/config.json | base64
 #### Шаг 3
 Добавьте сюда скриншота вывода при вызове https://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
 
+Вызов через ingress по `http` (TLS в кластере не настроен, `ssl-redirect` выключен). 
+В ответе видны и фильмы из инициализации базы, и `Test Movie 501` / `Test Movie 70`, созданные прогоном Postman-тестов:
+![Вывод /api/movies через ingress](docs/screenshots/k8s-api-movies.png)
+
+Лог `events-service` после прогона `npm run test:kubernetes`. 
+По три события опубликовано и столько же прочитано тем же сервисом:
+![Лог events-service](docs/screenshots/k8s-events-log.png)
+
+Прогон тестов на кластере: 22 запроса, 42 проверки, 0 падений. 
+Все зелёные, включая health-проверки movies и events. 
+При миграции на 100% `/api/movies/health` уходит через прокси в movies-service, а `/api/events/health` - напрямую в events-service).
+
+`MOVIES_MIGRATION_PERCENT` в `configmap.yaml` меняется через `kubectl patch` и применяется после `kubectl rollout restart deployment/proxy-service`. 
+Значение попадает в контейнер через `envFrom` при старте пода. 
+Поэтому без перезапуска configmap ни на что не влияет. 
+Проверено в обе стороны: при `100` в логе прокси `-> movies-service`, при `0` -- `-> monolith`.
 
 ## Задание 4
 Для простоты дальнейшего обновления и развертывания вам как архитектуру необходимо так же реализовать helm-чарты для прокси-сервиса и проверить работу 
