@@ -1,0 +1,124 @@
+@startuml
+!include <C4/C4_Container>
+
+LAYOUT_TOP_DOWN()
+
+title Кинобездна. Диаграмма контейнеров (To-Be)
+
+Person(viewer, "Пользователь", "Смотрит контент с мобильного, веба или смарт-ТВ")
+
+System_Boundary(cinema, "Кинобездна, целевая система") {
+
+  Container(web_app, "Web App", "React, SPA", "Браузерный клиент")
+  Container(mobile_app, "Mobile App", "iOS, Android", "Мобильный клиент")
+  Container(tv_app, "Smart TV App", "TV SDK", "Клиент на смарт-ТВ")
+
+  Container(gateway, "API Gateway", "Ingress", "Единая точка вызова: TLS, аутентификация, маршрутизация, лимиты")
+  Container(strangler, "Strangler Fig Proxy", "Go", "Переходный период: /api/* и feature flag между монолитом и вынесенными сервисами, доля трафика на movies")
+
+  Container(bff_web, "Web BFF", "Go", "Агрегация под веб: страницы, длинные списки, больше данных в ответе")
+  Container(bff_mobile, "Mobile BFF", "Go", "Компактные ответы под мобильные сценарии")
+  Container(bff_tv, "TV BFF", "Go", "Минимум данных, постраничная навигация пультом")
+
+  Boundary(identity_domain, "Домен: пользователи и доступ") {
+    Container(identity, "Identity Service", "Go", "Регистрация, вход, профиль, выпуск токенов")
+    ContainerDb(identity_db, "Identity DB", "PostgreSQL", "Учётные записи и профили")
+  }
+
+  Boundary(catalog_domain, "Домен: каталог") {
+    Container(catalog, "Catalog Service", "Go", "Метаданные фильмов: жанры, актёры, средний рейтинг (он же movies)")
+    ContainerDb(catalog_db, "Catalog DB", "PostgreSQL", "Метаданные фильмов")
+  }
+
+  Boundary(library_domain, "Домен: библиотека") {
+    Container(library, "Library Service", "Go", "Оценки, отзывы, избранное")
+    ContainerDb(library_db, "Library DB", "PostgreSQL", "Связи пользователь-фильм")
+  }
+
+  Boundary(billing_domain, "Домен: биллинг") {
+    Container(billing, "Billing Service", "Go", "Подписки, платежи, скидки, автопродление")
+    ContainerDb(billing_db, "Billing DB", "PostgreSQL", "Платежи, подписки, применённые скидки")
+  }
+
+  Boundary(content_domain, "Домен: контент") {
+    Container(content, "Content Service", "Go", "Права на просмотр, ссылка на поток, реестр источников")
+    ContainerDb(content_db, "Content DB", "PostgreSQL", "Источники и права")
+  }
+
+  Boundary(recs_domain, "Домен: рекомендации") {
+    Container(recs_acl, "Recommendations ACL", "Go", "Перевод контрактов внешней системы")
+    ContainerDb(recs_cache, "Cache", "Redis", "Кэш готовых подборок")
+  }
+
+  ContainerQueue(bus, "Event Bus", "Apache Kafka", "События: просмотры, оценки, платежи, регистрации")
+
+  Boundary(legacy, "Монолит (переходный период)") {
+    Container(monolith, "CinemaAbyss Monolith", "Go", "Ещё не вынесенные домены")
+    ContainerDb(legacy_db, "Legacy DB", "PostgreSQL", "Общая БД монолита, дробится по мере миграции")
+  }
+}
+
+System_Ext(payment, "Платёжная система", "Эквайринг, статусы платежей")
+System_Ext(partners, "Онлайн-кинотеатры и открытые источники", "Контент и права")
+System_Ext(recsys, "Рекомендательная система", "Внешний алгоритм подборок, чёрный ящик")
+UpdateElementStyle(recsys, $bgColor="#e8e8e8", $borderColor="#888888", $fontColor="#333333")
+System_Ext(s3, "Object Storage (S3)", "Видео и постеры")
+
+Rel(viewer, web_app, "Использует")
+Rel(viewer, mobile_app, "Использует")
+Rel(viewer, tv_app, "Использует")
+
+Rel(web_app, gateway, "API", "HTTPS")
+Rel(mobile_app, gateway, "API", "HTTPS")
+Rel(tv_app, gateway, "API", "HTTPS")
+
+Rel(gateway, identity, "Проверяет токен", "REST")
+Rel(gateway, bff_web, "Маршрутизация", "REST")
+Rel(gateway, bff_mobile, "Маршрутизация", "REST")
+Rel(gateway, bff_tv, "Маршрутизация", "REST")
+Rel(gateway, strangler, "Legacy API /api/*", "REST")
+
+Rel(strangler, monolith, "Что ещё не вынесено", "REST")
+Rel(strangler, catalog, "Каталог после миграции", "REST, feature flag")
+
+Rel(bff_web, catalog, "каталог", "REST")
+Rel(bff_web, library, "оценки", "REST")
+Rel(bff_web, billing, "подписка", "REST")
+Rel(bff_web, content, "поток", "REST")
+Rel(bff_web, recs_acl, "подборка", "REST")
+
+Rel(bff_mobile, catalog, "каталог", "REST")
+Rel(bff_mobile, library, "оценки", "REST")
+Rel(bff_mobile, billing, "подписка", "REST")
+Rel(bff_mobile, content, "поток", "REST")
+Rel(bff_mobile, recs_acl, "подборка", "REST")
+
+Rel(bff_tv, catalog, "каталог", "REST")
+Rel(bff_tv, content, "поток", "REST")
+Rel(bff_tv, library, "оценки", "REST")
+Rel(bff_tv, recs_acl, "подборка", "REST")
+
+Rel(identity, identity_db, "SQL")
+Rel(catalog, catalog_db, "SQL")
+Rel(library, library_db, "SQL")
+Rel(billing, billing_db, "SQL")
+Rel(content, content_db, "SQL")
+Rel(monolith, legacy_db, "SQL")
+
+Rel(identity, bus, "События регистраций", "produce")
+Rel(catalog, bus, "Обновления каталога", "produce")
+Rel(library, bus, "Оценки и отзывы", "produce")
+Rel(billing, bus, "Платежи и подписки", "produce")
+Rel(content, bus, "События просмотра", "produce")
+Rel(content, billing, "Проверяет активную подписку", "REST")
+Rel(bus, recs_acl, "Просмотры и оценки", "consume")
+
+BiRel(billing, payment, "Платежи и вебхуки", "HTTPS")
+BiRel(content, partners, "Права и ссылка на поток", "HTTPS")
+Rel(recs_acl, recs_cache, "Читает и обновляет", "Redis")
+Rel(recs_acl, recsys, "Запрос подборки", "HTTPS")
+Rel(recsys, recs_acl, "Готовая подборка", "HTTPS или AMQP")
+Rel(content, s3, "Читает контент", "S3 API")
+
+
+@enduml
